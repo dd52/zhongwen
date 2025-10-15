@@ -69,6 +69,27 @@
   font-size: 12px;
 }
 
+#zhongwen-window .w-jyutping {
+  font-size: 18px;
+}
+
+#zhongwen-window .w-jyutping-small {
+  font-size: 16px;
+}
+
+#zhongwen-window .cantonese-separator {
+  border: 0;
+  height: 1px;
+  background: #ccc;
+  margin: 10px 0;
+}
+
+#zhongwen-window .cantonese-header {
+  font-weight: bold;
+  font-size: 14px;
+  color: #666;
+}
+
 #zhongwen-window .grammar {
   font-weight: bold;
 }
@@ -194,6 +215,10 @@
   color: #a0a0a0;
 }
 
+#zhongwen-window.tonecolor-standard .tone6 {
+  color: #9b59b6;
+}
+
 
 /* Pleco Tone Colors */
 #zhongwen-window.tonecolor-pleco .tone1 {
@@ -216,6 +241,10 @@
   color: #777777;
 }
 
+#zhongwen-window.tonecolor-pleco .tone6 {
+  color: #ff6600;
+}
+
 
 /* Hanping Tone Colors */
 #zhongwen-window.tonecolor-hanping .tone1 {
@@ -236,4 +265,8 @@
 
 #zhongwen-window.tonecolor-hanping .tone5 {
   color: #a0a0a0;
+}
+
+#zhongwen-window.tonecolor-hanping .tone6 {
+  color: #9370db;
 }

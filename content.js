@@ -46,7 +46,7 @@
 
 /* global globalThis */
 
-'use strict';
+"use strict";
 
 let config;
 
@@ -84,1000 +84,1171 @@ let savedSelEndList = [];
 let zwnj = /\u200c/g;
 
 function enableTab() {
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('keydown', onKeyDown);
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("keydown", onKeyDown);
 }
 
 function disableTab() {
-    document.removeEventListener('mousemove', onMouseMove);
-    document.removeEventListener('keydown', onKeyDown);
+  document.removeEventListener("mousemove", onMouseMove);
+  document.removeEventListener("keydown", onKeyDown);
 
-    let popup = document.getElementById('zhongwen-window');
-    if (popup) {
-        popup.parentNode.removeChild(popup);
-    }
+  let popup = document.getElementById("zhongwen-window");
+  if (popup) {
+    popup.parentNode.removeChild(popup);
+  }
 
-    clearHighlight();
+  clearHighlight();
 }
 
 function onKeyDown(keyDown) {
+  if (keyDown.ctrlKey || keyDown.metaKey) {
+    return;
+  }
 
-    if (keyDown.ctrlKey || keyDown.metaKey) {
-        return;
-    }
+  if (keyDown.keyCode === 27) {
+    // esc key pressed
+    hidePopup();
+    return;
+  }
 
-    if (keyDown.keyCode === 27) {
-        // esc key pressed
-        hidePopup();
-        return;
-    }
+  if (keyDown.altKey && keyDown.keyCode === 87) {
+    // Alt + w
+    chrome.runtime.sendMessage({
+      type: "open",
+      tabType: "wordlist",
+      url: "/wordlist.html",
+    });
+    return;
+  }
 
-    if (keyDown.altKey && keyDown.keyCode === 87) {
-        // Alt + w
+  if (!isVisible()) {
+    return;
+  }
+
+  switch (keyDown.keyCode) {
+    case 65: // 'a'
+      altView = (altView + 1) % 3;
+      triggerSearch();
+      break;
+
+    case 67: // 'c'
+      copyToClipboard(getTextForClipboard());
+      break;
+
+    case 66: // 'b'
+      {
+        let offset = selStartDelta;
+        for (let i = 0; i < 10; i++) {
+          selStartDelta = --offset;
+          let ret = triggerSearch();
+          if (ret === 0) {
+            break;
+          } else if (ret === 2) {
+            savedRangeNode = findPreviousTextNode(
+              savedRangeNode.parentNode,
+              savedRangeNode
+            );
+            savedRangeOffset = 0;
+            offset = savedRangeNode.data.length;
+          }
+        }
+      }
+      break;
+
+    case 71: // 'g'
+      if (config.grammar !== "no" && savedSearchResults.grammar) {
+        let sel = encodeURIComponent(window.getSelection().toString());
+
+        // https://resources.allsetlearning.com/chinese/grammar/%E4%B8%AA
+        let allset =
+          "https://resources.allsetlearning.com/chinese/grammar/" + sel;
+
         chrome.runtime.sendMessage({
-            type: 'open',
-            tabType: 'wordlist',
-            url: '/wordlist.html'
+          type: "open",
+          tabType: "grammar",
+          url: allset,
         });
-        return;
-    }
+      }
+      break;
 
-    if (!isVisible()) {
-        return;
-    }
-
-    switch (keyDown.keyCode) {
-
-        case 65: // 'a'
-            altView = (altView + 1) % 3;
-            triggerSearch();
-            break;
-
-        case 67: // 'c'
-            copyToClipboard(getTextForClipboard());
-            break;
-
-        case 66: // 'b'
-        {
-            let offset = selStartDelta;
-            for (let i = 0; i < 10; i++) {
-                selStartDelta = --offset;
-                let ret = triggerSearch();
-                if (ret === 0) {
-                    break;
-                } else if (ret === 2) {
-                    savedRangeNode = findPreviousTextNode(savedRangeNode.parentNode, savedRangeNode);
-                    savedRangeOffset = 0;
-                    offset = savedRangeNode.data.length;
-                }
-            }
+    case 77: // 'm'
+      selStartIncrement = 1;
+    // falls through
+    case 78: // 'n'
+      for (let i = 0; i < 10; i++) {
+        selStartDelta += selStartIncrement;
+        let ret = triggerSearch();
+        if (ret === 0) {
+          break;
+        } else if (ret === 2) {
+          savedRangeNode = findNextTextNode(
+            savedRangeNode.parentNode,
+            savedRangeNode
+          );
+          savedRangeOffset = 0;
+          selStartDelta = 0;
+          selStartIncrement = 0;
         }
-            break;
+      }
+      break;
 
-        case 71: // 'g'
-            if (config.grammar !== 'no' && savedSearchResults.grammar) {
-                let sel = encodeURIComponent(window.getSelection().toString());
-
-                // https://resources.allsetlearning.com/chinese/grammar/%E4%B8%AA
-                let allset = 'https://resources.allsetlearning.com/chinese/grammar/' + sel;
-
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'grammar',
-                    url: allset
-                });
-            }
-            break;
-
-        case 77: // 'm'
-            selStartIncrement = 1;
-        // falls through
-        case 78: // 'n'
-            for (let i = 0; i < 10; i++) {
-                selStartDelta += selStartIncrement;
-                let ret = triggerSearch();
-                if (ret === 0) {
-                    break;
-                } else if (ret === 2) {
-                    savedRangeNode = findNextTextNode(savedRangeNode.parentNode, savedRangeNode);
-                    savedRangeOffset = 0;
-                    selStartDelta = 0;
-                    selStartIncrement = 0;
-                }
-            }
-            break;
-
-        case 82: // 'r'
-        {
-            let entries = [];
-            for (let j = 0; j < savedSearchResults.length; j++) {
-                let entry = {
-                    simplified: savedSearchResults[j][0],
-                    traditional: savedSearchResults[j][1],
-                    pinyin: savedSearchResults[j][2],
-                    definition: savedSearchResults[j][3]
-                };
-                entries.push(entry);
-            }
-
-            chrome.runtime.sendMessage({
-                'type': 'add',
-                'entries': entries
-            });
-
-            showPopup('Added to word list.<p>Press Alt+W to open word list.', null, -1, -1);
+    case 82: // 'r'
+      {
+        let entries = [];
+        for (let j = 0; j < savedSearchResults.length; j++) {
+          let entry = {
+            simplified: savedSearchResults[j][0],
+            traditional: savedSearchResults[j][1],
+            pinyin: savedSearchResults[j][2],
+            definition: savedSearchResults[j][3],
+          };
+          entries.push(entry);
         }
-            break;
 
-        case 83: // 's'
-            {
+        chrome.runtime.sendMessage({
+          type: "add",
+          entries: entries,
+        });
 
-                // https://www.skritter.com/vocab/api/add?from=Chrome&lang=zh&word=浏览&trad=瀏 覽&rdng=liú lǎn&defn=to skim over; to browse
+        showPopup(
+          "Added to word list.<p>Press Alt+W to open word list.",
+          null,
+          -1,
+          -1
+        );
+      }
+      break;
 
-                let skritter = 'https://skritter.com';
-                if (config.skritterTLD === 'cn') {
-                    skritter = 'https://skritter.cn';
-                }
+    case 83: // 's'
+      {
+        // https://www.skritter.com/vocab/api/add?from=Chrome&lang=zh&word=浏览&trad=瀏 覽&rdng=liú lǎn&defn=to skim over; to browse
 
-                skritter +=
-                    '/vocab/api/add?from=zhongwen&ref=zhongwen&lang=zh&word=' +
-                    encodeURIComponent(savedSearchResults[0][0]) +
-                    '&trad=' + encodeURIComponent(savedSearchResults[0][1]) +
-                    '&rdng=' + encodeURIComponent(savedSearchResults[0][4]) +
-                    '&defn=' + encodeURIComponent(savedSearchResults[0][3]);
+        let skritter = "https://skritter.com";
+        if (config.skritterTLD === "cn") {
+          skritter = "https://skritter.cn";
+        }
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'skritter',
-                    url: skritter
-                });
-            }
-            break;
+        skritter +=
+          "/vocab/api/add?from=zhongwen&ref=zhongwen&lang=zh&word=" +
+          encodeURIComponent(savedSearchResults[0][0]) +
+          "&trad=" +
+          encodeURIComponent(savedSearchResults[0][1]) +
+          "&rdng=" +
+          encodeURIComponent(savedSearchResults[0][4]) +
+          "&defn=" +
+          encodeURIComponent(savedSearchResults[0][3]);
 
-        case 84: // 't'
-            {
-                let sel = encodeURIComponent(
-                    window.getSelection().toString());
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "skritter",
+          url: skritter,
+        });
+      }
+      break;
 
-                // https://tatoeba.org/eng/sentences/search?from=cmn&to=eng&query=%E8%BF%9B%E8%A1%8C
-                let tatoeba = 'https://tatoeba.org/eng/sentences/search?from=cmn&to=eng&query=' + sel;
+    case 84: // 't'
+      {
+        let sel = encodeURIComponent(window.getSelection().toString());
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'tatoeba',
-                    url: tatoeba
-                });
-            }
-            break;
+        // https://tatoeba.org/eng/sentences/search?from=cmn&to=eng&query=%E8%BF%9B%E8%A1%8C
+        let tatoeba =
+          "https://tatoeba.org/eng/sentences/search?from=cmn&to=eng&query=" +
+          sel;
 
-        case 86: // 'v'
-            if (config.vocab !== 'no' && savedSearchResults.vocab) {
-                let sel = encodeURIComponent(window.getSelection().toString());
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "tatoeba",
+          url: tatoeba,
+        });
+      }
+      break;
 
-                // https://resources.allsetlearning.com/chinese/vocabulary/%E4%B8%AA
-                let allset = 'https://resources.allsetlearning.com/chinese/vocabulary/' + sel;
+    case 86: // 'v'
+      if (config.vocab !== "no" && savedSearchResults.vocab) {
+        let sel = encodeURIComponent(window.getSelection().toString());
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'vocab',
-                    url: allset
-                });
-            }
-            break;
+        // https://resources.allsetlearning.com/chinese/vocabulary/%E4%B8%AA
+        let allset =
+          "https://resources.allsetlearning.com/chinese/vocabulary/" + sel;
 
-        case 88: // 'x'
-            altView = 0;
-            popY -= 20;
-            triggerSearch();
-            break;
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "vocab",
+          url: allset,
+        });
+      }
+      break;
 
-        case 89: // 'y'
-            altView = 0;
-            popY += 20;
-            triggerSearch();
-            break;
+    case 88: // 'x'
+      altView = 0;
+      popY -= 20;
+      triggerSearch();
+      break;
 
-        case 49: // '1'
-            if (keyDown.altKey) {
+    case 89: // 'y'
+      altView = 0;
+      popY += 20;
+      triggerSearch();
+      break;
 
-                // use the simplified character for linedict lookup
-                let simp = savedSearchResults[0][0];
+    case 49: // '1'
+      if (keyDown.altKey) {
+        // use the simplified character for linedict lookup
+        let simp = savedSearchResults[0][0];
 
-                // https://english.dict.naver.com/english-chinese-dictionary/#/search?query=%E8%AF%8D%E5%85%B8
-                let linedict = 'https://english.dict.naver.com/english-chinese-dictionary/#/search?query=' +
-                    encodeURIComponent(simp);
+        // https://english.dict.naver.com/english-chinese-dictionary/#/search?query=%E8%AF%8D%E5%85%B8
+        let linedict =
+          "https://english.dict.naver.com/english-chinese-dictionary/#/search?query=" +
+          encodeURIComponent(simp);
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'linedict',
-                    url: linedict
-                });
-            }
-            break;
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "linedict",
+          url: linedict,
+        });
+      }
+      break;
 
-        case 50: // '2'
-            if (keyDown.altKey) {
-                let sel = encodeURIComponent(
-                    window.getSelection().toString());
+    case 50: // '2'
+      if (keyDown.altKey) {
+        let sel = encodeURIComponent(window.getSelection().toString());
 
-                // https://forvo.com/search/%E4%B8%AD%E6%96%87/zh/
-                var forvo = 'https://forvo.com/search/' + sel + '/zh/';
+        // https://forvo.com/search/%E4%B8%AD%E6%96%87/zh/
+        var forvo = "https://forvo.com/search/" + sel + "/zh/";
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'forvo',
-                    url: forvo
-                });
-            }
-            break;
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "forvo",
+          url: forvo,
+        });
+      }
+      break;
 
-        case 51: // '3'
-            if (keyDown.altKey) {
-                let sel = encodeURIComponent(
-                    window.getSelection().toString());
+    case 51: // '3'
+      if (keyDown.altKey) {
+        let sel = encodeURIComponent(window.getSelection().toString());
 
-                // https://dict.cn/%E7%BF%BB%E8%AF%91
-                let dictcn = 'https://dict.cn/' + sel;
+        // https://dict.cn/%E7%BF%BB%E8%AF%91
+        let dictcn = "https://dict.cn/" + sel;
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'dictcn',
-                    url: dictcn
-                });
-            }
-            break;
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "dictcn",
+          url: dictcn,
+        });
+      }
+      break;
 
-        case 52: // '4'
-            if (keyDown.altKey) {
-                let sel = encodeURIComponent(
-                    window.getSelection().toString());
+    case 52: // '4'
+      if (keyDown.altKey) {
+        let sel = encodeURIComponent(window.getSelection().toString());
 
-                // https://www.iciba.com/%E4%B8%AD%E9%A4%90
-                let iciba = 'https://www.iciba.com/' + sel;
+        // https://www.iciba.com/%E4%B8%AD%E9%A4%90
+        let iciba = "https://www.iciba.com/" + sel;
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'iciba',
-                    url: iciba
-                });
-            }
-            break;
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "iciba",
+          url: iciba,
+        });
+      }
+      break;
 
-        case 53: // '5'
-            if (keyDown.altKey) {
-                let sel = encodeURIComponent(
-                    window.getSelection().toString());
+    case 53: // '5'
+      if (keyDown.altKey) {
+        let sel = encodeURIComponent(window.getSelection().toString());
 
-                // https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb=%E4%B8%AD%E6%96%87
-                let mdbg = 'https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb=' + sel;
+        // https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb=%E4%B8%AD%E6%96%87
+        let mdbg =
+          "https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb=" +
+          sel;
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'mdbg',
-                    url: mdbg
-                });
-            }
-            break;
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "mdbg",
+          url: mdbg,
+        });
+      }
+      break;
 
-        case 54: // '6'
-            if (keyDown.altKey) {
-                let sel = encodeURIComponent(
-                    window.getSelection().toString());
+    case 54: // '6'
+      if (keyDown.altKey) {
+        let sel = encodeURIComponent(window.getSelection().toString());
 
-                let reverso = 'https://context.reverso.net/translation/chinese-english/' + sel;
+        let reverso =
+          "https://context.reverso.net/translation/chinese-english/" + sel;
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'reverso',
-                    url: reverso
-                });
-            }
-            break;
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "reverso",
+          url: reverso,
+        });
+      }
+      break;
 
-        case 55: // '7'
-            if (keyDown.altKey) {
+    case 55: // '7'
+      if (keyDown.altKey) {
+        // use the traditional character for moedict lookup
+        let trad = savedSearchResults[0][1];
 
-                // use the traditional character for moedict lookup
-                let trad = savedSearchResults[0][1];
+        // https://www.moedict.tw/~%E4%B8%AD%E6%96%87
+        let moedict = "https://www.moedict.tw/~" + encodeURIComponent(trad);
 
-                // https://www.moedict.tw/~%E4%B8%AD%E6%96%87
-                let moedict = 'https://www.moedict.tw/~' + encodeURIComponent(trad);
+        chrome.runtime.sendMessage({
+          type: "open",
+          tabType: "moedict",
+          url: moedict,
+        });
+      }
+      break;
 
-                chrome.runtime.sendMessage({
-                    type: 'open',
-                    tabType: 'moedict',
-                    url: moedict
-                });
-            }
-            break;
-
-        default:
-            return;
-    }
+    default:
+      return;
+  }
 }
 
 function onMouseMove(mouseMove) {
-    if (mouseMove.target.nodeName === 'TEXTAREA' || mouseMove.target.nodeName === 'INPUT'
-        || mouseMove.target.nodeName === 'DIV') {
+  if (
+    mouseMove.target.nodeName === "TEXTAREA" ||
+    mouseMove.target.nodeName === "INPUT" ||
+    mouseMove.target.nodeName === "DIV"
+  ) {
+    let div = document.getElementById("zhongwenDiv");
 
-        let div = document.getElementById('zhongwenDiv');
-
-        if (mouseMove.altKey) {
-
-            if (!div && (mouseMove.target.nodeName === 'TEXTAREA' || mouseMove.target.nodeName === 'INPUT')) {
-
-                div = makeDiv(mouseMove.target);
-                document.body.appendChild(div);
-                div.scrollTop = mouseMove.target.scrollTop;
-                div.scrollLeft = mouseMove.target.scrollLeft;
-            }
-        } else {
-            if (div) {
-                document.body.removeChild(div);
-            }
-        }
+    if (mouseMove.altKey) {
+      if (
+        !div &&
+        (mouseMove.target.nodeName === "TEXTAREA" ||
+          mouseMove.target.nodeName === "INPUT")
+      ) {
+        div = makeDiv(mouseMove.target);
+        document.body.appendChild(div);
+        div.scrollTop = mouseMove.target.scrollTop;
+        div.scrollLeft = mouseMove.target.scrollLeft;
+      }
+    } else {
+      if (div) {
+        document.body.removeChild(div);
+      }
     }
+  }
 
-    if (clientX && clientY) {
-        if (mouseMove.clientX === clientX && mouseMove.clientY === clientY) {
-            return;
-        }
+  if (clientX && clientY) {
+    if (mouseMove.clientX === clientX && mouseMove.clientY === clientY) {
+      return;
     }
-    clientX = mouseMove.clientX;
-    clientY = mouseMove.clientY;
+  }
+  clientX = mouseMove.clientX;
+  clientY = mouseMove.clientY;
 
-    let range;
-    let rangeNode;
-    let rangeOffset;
+  let range;
+  let rangeNode;
+  let rangeOffset;
 
-    // Handle Chrome and Firefox
-    if (document.caretRangeFromPoint) {
-        range = document.caretRangeFromPoint(mouseMove.clientX, mouseMove.clientY);
-        if (range === null) {
-            return;
-        }
-        rangeNode = range.startContainer;
-        rangeOffset = range.startOffset;
-    } else if (document.caretPositionFromPoint) {
-        range = document.caretPositionFromPoint(mouseMove.clientX, mouseMove.clientY);
-        if (range === null) {
-            return;
-        }
-        rangeNode = range.offsetNode;
-        rangeOffset = range.offset;
+  // Handle Chrome and Firefox
+  if (document.caretRangeFromPoint) {
+    range = document.caretRangeFromPoint(mouseMove.clientX, mouseMove.clientY);
+    if (range === null) {
+      return;
     }
-
-    if (mouseMove.target === savedTarget) {
-        if (rangeNode === savedRangeNode && rangeOffset === savedRangeOffset) {
-            return;
-        }
+    rangeNode = range.startContainer;
+    rangeOffset = range.startOffset;
+  } else if (document.caretPositionFromPoint) {
+    range = document.caretPositionFromPoint(
+      mouseMove.clientX,
+      mouseMove.clientY
+    );
+    if (range === null) {
+      return;
     }
+    rangeNode = range.offsetNode;
+    rangeOffset = range.offset;
+  }
 
-    if (timer) {
-        clearTimeout(timer);
-        timer = null;
+  if (mouseMove.target === savedTarget) {
+    if (rangeNode === savedRangeNode && rangeOffset === savedRangeOffset) {
+      return;
     }
+  }
 
-    if (rangeNode.data && rangeOffset === rangeNode.data.length) {
-        rangeNode = findNextTextNode(rangeNode.parentNode, rangeNode);
-        rangeOffset = 0;
-    }
+  if (timer) {
+    clearTimeout(timer);
+    timer = null;
+  }
 
-    if (!rangeNode || rangeNode.parentNode !== mouseMove.target) {
-        rangeNode = null;
-        rangeOffset = -1;
-    }
+  if (rangeNode.data && rangeOffset === rangeNode.data.length) {
+    rangeNode = findNextTextNode(rangeNode.parentNode, rangeNode);
+    rangeOffset = 0;
+  }
 
-    savedTarget = mouseMove.target;
-    savedRangeNode = rangeNode;
-    savedRangeOffset = rangeOffset;
+  if (!rangeNode || rangeNode.parentNode !== mouseMove.target) {
+    rangeNode = null;
+    rangeOffset = -1;
+  }
 
-    selStartDelta = 0;
-    selStartIncrement = 1;
+  savedTarget = mouseMove.target;
+  savedRangeNode = rangeNode;
+  savedRangeOffset = rangeOffset;
 
-    if (rangeNode && rangeNode.data && rangeOffset < rangeNode.data.length) {
-        popX = mouseMove.clientX;
-        popY = mouseMove.clientY;
-        timer = setTimeout(() => triggerSearch(), 50);
-        return;
-    }
+  selStartDelta = 0;
+  selStartIncrement = 1;
 
-    // Don't close just because we moved from a valid pop-up slightly over to a place with nothing.
-    let dx = popX - mouseMove.clientX;
-    let dy = popY - mouseMove.clientY;
-    let distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance > 4) {
-        clearHighlight();
-        hidePopup();
-    }
+  if (rangeNode && rangeNode.data && rangeOffset < rangeNode.data.length) {
+    popX = mouseMove.clientX;
+    popY = mouseMove.clientY;
+    timer = setTimeout(() => triggerSearch(), 50);
+    return;
+  }
+
+  // Don't close just because we moved from a valid pop-up slightly over to a place with nothing.
+  let dx = popX - mouseMove.clientX;
+  let dy = popY - mouseMove.clientY;
+  let distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance > 4) {
+    clearHighlight();
+    hidePopup();
+  }
 }
 
 function triggerSearch() {
+  let rangeNode = savedRangeNode;
+  let selStartOffset = savedRangeOffset + selStartDelta;
 
-    let rangeNode = savedRangeNode;
-    let selStartOffset = savedRangeOffset + selStartDelta;
+  selStartIncrement = 1;
 
-    selStartIncrement = 1;
+  if (!rangeNode) {
+    clearHighlight();
+    hidePopup();
+    return 1;
+  }
 
-    if (!rangeNode) {
-        clearHighlight();
-        hidePopup();
-        return 1;
-    }
+  if (selStartOffset < 0 || rangeNode.data.length <= selStartOffset) {
+    clearHighlight();
+    hidePopup();
+    return 2;
+  }
 
-    if (selStartOffset < 0 || rangeNode.data.length <= selStartOffset) {
-        clearHighlight();
-        hidePopup();
-        return 2;
-    }
+  let u = rangeNode.data.charCodeAt(selStartOffset);
 
-    let u = rangeNode.data.charCodeAt(selStartOffset);
+  let isChineseCharacter =
+    !isNaN(u) &&
+    (u === 0x25cb ||
+      (0x3400 <= u && u <= 0x9fff) ||
+      (0xf900 <= u && u <= 0xfaff) ||
+      (0xff21 <= u && u <= 0xff3a) ||
+      (0xff41 <= u && u <= 0xff5a) ||
+      (0xd800 <= u && u <= 0xdfff));
 
-    let isChineseCharacter = !isNaN(u) && (
-        u === 0x25CB ||
-        (0x3400 <= u && u <= 0x9FFF) ||
-        (0xF900 <= u && u <= 0xFAFF) ||
-        (0xFF21 <= u && u <= 0xFF3A) ||
-        (0xFF41 <= u && u <= 0xFF5A) ||
-        (0xD800 <= u && u <= 0xDFFF)
-    );
+  if (!isChineseCharacter) {
+    clearHighlight();
+    hidePopup();
+    return 3;
+  }
 
-    if (!isChineseCharacter) {
-        clearHighlight();
-        hidePopup();
-        return 3;
-    }
+  let selEndList = [];
+  let originalText = getText(
+    rangeNode,
+    selStartOffset,
+    selEndList,
+    30 /*maxlength*/
+  );
 
-    let selEndList = [];
-    let originalText = getText(rangeNode, selStartOffset, selEndList, 30 /*maxlength*/);
+  // Workaround for Google Docs: remove zero-width non-joiner &zwnj;
+  let text = originalText.replace(zwnj, "");
 
-    // Workaround for Google Docs: remove zero-width non-joiner &zwnj;
-    let text = originalText.replace(zwnj, '');
+  savedSelStartOffset = selStartOffset;
+  savedSelEndList = selEndList;
 
-    savedSelStartOffset = selStartOffset;
-    savedSelEndList = selEndList;
+  chrome.runtime.sendMessage(
+    {
+      type: "search",
+      text: text,
+      originalText: originalText,
+    },
+    processSearchResult
+  );
 
-    chrome.runtime.sendMessage({
-            'type': 'search',
-            'text': text,
-            'originalText': originalText
-        },
-        processSearchResult
-    );
-
-    return 0;
+  return 0;
 }
 
 function processSearchResult(result) {
+  let selStartOffset = savedSelStartOffset;
+  let selEndList = savedSelEndList;
 
-    let selStartOffset = savedSelStartOffset;
-    let selEndList = savedSelEndList;
+  if (!result) {
+    hidePopup();
+    clearHighlight();
+    return;
+  }
 
-    if (!result) {
-        hidePopup();
-        clearHighlight();
-        return;
+  let highlightLength;
+  let index = 0;
+  for (let i = 0; i < result.matchLen; i++) {
+    // Google Docs workaround: determine the correct highlight length
+    while (result.originalText[index] === "\u200c") {
+      index++;
     }
+    index++;
+  }
+  highlightLength = index;
 
-    let highlightLength;
-    let index = 0;
-    for (let i = 0; i < result.matchLen; i++) {
-        // Google Docs workaround: determine the correct highlight length
-        while (result.originalText[index] === '\u200c') {
-            index++;
-        }
-        index++;
+  selStartIncrement = result.matchLen;
+  selStartDelta = selStartOffset - savedRangeOffset;
+
+  let rangeNode = savedRangeNode;
+  // don't try to highlight form elements
+  if (!("form" in savedTarget)) {
+    let doc = rangeNode.ownerDocument;
+    if (!doc) {
+      clearHighlight();
+      hidePopup();
+      return;
     }
-    highlightLength = index;
+    highlightMatch(doc, rangeNode, selStartOffset, highlightLength, selEndList);
+  }
 
-    selStartIncrement = result.matchLen;
-    selStartDelta = (selStartOffset - savedRangeOffset);
-
-    let rangeNode = savedRangeNode;
-    // don't try to highlight form elements
-    if (!('form' in savedTarget)) {
-        let doc = rangeNode.ownerDocument;
-        if (!doc) {
-            clearHighlight();
-            hidePopup();
-            return;
-        }
-        highlightMatch(doc, rangeNode, selStartOffset, highlightLength, selEndList);
-    }
-
-    showPopup(makeHtml(result, config.tonecolors !== 'no'), savedTarget, popX, popY, false);
+  showPopup(
+    makeHtml(result, config.tonecolors !== "no"),
+    savedTarget,
+    popX,
+    popY,
+    false
+  );
 }
 
 // modifies selEndList as a side-effect
 function getText(startNode, offset, selEndList, maxLength) {
-    let text = '';
-    let endIndex;
+  let text = "";
+  let endIndex;
 
-    if (startNode.nodeType !== Node.TEXT_NODE) {
-        return '';
-    }
+  if (startNode.nodeType !== Node.TEXT_NODE) {
+    return "";
+  }
 
-    endIndex = Math.min(startNode.data.length, offset + maxLength);
-    text += startNode.data.substring(offset, endIndex);
-    selEndList.push({
-        node: startNode,
-        offset: endIndex
-    });
+  endIndex = Math.min(startNode.data.length, offset + maxLength);
+  text += startNode.data.substring(offset, endIndex);
+  selEndList.push({
+    node: startNode,
+    offset: endIndex,
+  });
 
-    let nextNode = startNode;
-    while ((text.length < maxLength) && ((nextNode = findNextTextNode(nextNode.parentNode, nextNode)) !== null)) {
-        text += getTextFromSingleNode(nextNode, selEndList, maxLength - text.length);
-    }
+  let nextNode = startNode;
+  while (
+    text.length < maxLength &&
+    (nextNode = findNextTextNode(nextNode.parentNode, nextNode)) !== null
+  ) {
+    text += getTextFromSingleNode(
+      nextNode,
+      selEndList,
+      maxLength - text.length
+    );
+  }
 
-    return text;
+  return text;
 }
 
 // modifies selEndList as a side-effect
 function getTextFromSingleNode(node, selEndList, maxLength) {
-    let endIndex;
+  let endIndex;
 
-    if (node.nodeName === '#text') {
-        endIndex = Math.min(maxLength, node.data.length);
-        selEndList.push({
-            node: node,
-            offset: endIndex
-        });
-        return node.data.substring(0, endIndex);
-    } else {
-        return '';
-    }
+  if (node.nodeName === "#text") {
+    endIndex = Math.min(maxLength, node.data.length);
+    selEndList.push({
+      node: node,
+      offset: endIndex,
+    });
+    return node.data.substring(0, endIndex);
+  } else {
+    return "";
+  }
 }
 
 function showPopup(html, elem, x, y, looseWidth) {
+  if (!x || !y) {
+    x = y = 0;
+  }
 
-    if (!x || !y) {
-        x = y = 0;
+  let popup = document.getElementById("zhongwen-window");
+
+  if (!popup) {
+    popup = document.createElement("div");
+    popup.setAttribute("id", "zhongwen-window");
+    document.documentElement.appendChild(popup);
+  }
+
+  popup.style.width = "auto";
+  popup.style.height = "auto";
+  popup.style.maxWidth = looseWidth ? "" : "600px";
+  popup.className = `background-${config.css} tonecolor-${config.toneColorScheme}`;
+
+  $(popup).html(html);
+
+  if (elem) {
+    popup.style.top = "-1000px";
+    popup.style.left = "0px";
+    popup.style.display = "";
+
+    let pW = popup.offsetWidth;
+    let pH = popup.offsetHeight;
+
+    if (pW <= 0) {
+      pW = 200;
+    }
+    if (pH <= 0) {
+      pH = 0;
+      let j = 0;
+      while ((j = html.indexOf("<br/>", j)) !== -1) {
+        j += 5;
+        pH += 22;
+      }
+      pH += 25;
     }
 
-    let popup = document.getElementById('zhongwen-window');
+    if (altView === 1) {
+      x = window.scrollX;
+      y = window.scrollY;
+    } else if (altView === 2) {
+      x = window.innerWidth - (pW + 20) + window.scrollX;
+      y = window.innerHeight - (pH + 20) + window.scrollY;
+    } else if (elem instanceof window.HTMLOptionElement) {
+      x = 0;
+      y = 0;
 
-    if (!popup) {
-        popup = document.createElement('div');
-        popup.setAttribute('id', 'zhongwen-window');
-        document.documentElement.appendChild(popup);
-    }
+      let p = elem;
+      while (p) {
+        x += p.offsetLeft;
+        y += p.offsetTop;
+        p = p.offsetParent;
+      }
 
-    popup.style.width = 'auto';
-    popup.style.height = 'auto';
-    popup.style.maxWidth = (looseWidth ? '' : '600px');
-    popup.className = `background-${config.css} tonecolor-${config.toneColorScheme}`;
+      if (elem.offsetTop > elem.parentNode.clientHeight) {
+        y -= elem.offsetTop;
+      }
 
-    $(popup).html(html);
-
-    if (elem) {
-        popup.style.top = '-1000px';
-        popup.style.left = '0px';
-        popup.style.display = '';
-
-        let pW = popup.offsetWidth;
-        let pH = popup.offsetHeight;
-
-        if (pW <= 0) {
-            pW = 200;
+      if (x + popup.offsetWidth > window.innerWidth) {
+        // too much to the right, go left
+        x -= popup.offsetWidth + 5;
+        if (x < 0) {
+          x = 0;
         }
-        if (pH <= 0) {
-            pH = 0;
-            let j = 0;
-            while ((j = html.indexOf('<br/>', j)) !== -1) {
-                j += 5;
-                pH += 22;
-            }
-            pH += 25;
-        }
-
-        if (altView === 1) {
-            x = window.scrollX;
-            y = window.scrollY;
-        } else if (altView === 2) {
-            x = (window.innerWidth - (pW + 20)) + window.scrollX;
-            y = (window.innerHeight - (pH + 20)) + window.scrollY;
-        } else if (elem instanceof window.HTMLOptionElement) {
-
-            x = 0;
-            y = 0;
-
-            let p = elem;
-            while (p) {
-                x += p.offsetLeft;
-                y += p.offsetTop;
-                p = p.offsetParent;
-            }
-
-            if (elem.offsetTop > elem.parentNode.clientHeight) {
-                y -= elem.offsetTop;
-            }
-
-            if (x + popup.offsetWidth > window.innerWidth) {
-                // too much to the right, go left
-                x -= popup.offsetWidth + 5;
-                if (x < 0) {
-                    x = 0;
-                }
-            } else {
-                // use SELECT's width
-                x += elem.parentNode.offsetWidth + 5;
-            }
-        } else {
-            // go left if necessary
-            if (x + pW > window.innerWidth - 20) {
-                x = (window.innerWidth - pW) - 20;
-                if (x < 0) {
-                    x = 0;
-                }
-            }
-
-            // below the mouse
-            let v = 25;
-
-            // go up if necessary
-            if (y + v + pH > window.innerHeight) {
-                let t = y - pH - 30;
-                if (t >= 0) {
-                    y = t;
-                }
-            } else  {
-                y += v;
-            }
-
-            x += window.scrollX;
-            y += window.scrollY;
-        }
+      } else {
+        // use SELECT's width
+        x += elem.parentNode.offsetWidth + 5;
+      }
     } else {
-        x += window.scrollX;
-        y += window.scrollY;
-    }
+      // go left if necessary
+      if (x + pW > window.innerWidth - 20) {
+        x = window.innerWidth - pW - 20;
+        if (x < 0) {
+          x = 0;
+        }
+      }
 
-    // (-1, -1) indicates: leave position unchanged
-    if (x !== -1 && y !== -1) {
-        popup.style.left = x + 'px';
-        popup.style.top = y + 'px';
-        popup.style.display = '';
+      // below the mouse
+      let v = 25;
+
+      // go up if necessary
+      if (y + v + pH > window.innerHeight) {
+        let t = y - pH - 30;
+        if (t >= 0) {
+          y = t;
+        }
+      } else {
+        y += v;
+      }
+
+      x += window.scrollX;
+      y += window.scrollY;
     }
+  } else {
+    x += window.scrollX;
+    y += window.scrollY;
+  }
+
+  // (-1, -1) indicates: leave position unchanged
+  if (x !== -1 && y !== -1) {
+    popup.style.left = x + "px";
+    popup.style.top = y + "px";
+    popup.style.display = "";
+  }
 }
 
 function hidePopup() {
-    let popup = document.getElementById('zhongwen-window');
-    if (popup) {
-        popup.style.display = 'none';
-        popup.textContent = '';
-    }
+  let popup = document.getElementById("zhongwen-window");
+  if (popup) {
+    popup.style.display = "none";
+    popup.textContent = "";
+  }
 }
 
-function highlightMatch(doc, rangeStartNode, rangeStartOffset, matchLen, selEndList) {
-    if (!selEndList || selEndList.length === 0) return;
+function highlightMatch(
+  doc,
+  rangeStartNode,
+  rangeStartOffset,
+  matchLen,
+  selEndList
+) {
+  if (!selEndList || selEndList.length === 0) return;
 
-    let selEnd;
-    let offset = rangeStartOffset + matchLen;
+  let selEnd;
+  let offset = rangeStartOffset + matchLen;
 
-    for (let i = 0, len = selEndList.length; i < len; i++) {
-        selEnd = selEndList[i];
-        if (offset <= selEnd.offset) {
-            break;
-        }
-        offset -= selEnd.offset;
+  for (let i = 0, len = selEndList.length; i < len; i++) {
+    selEnd = selEndList[i];
+    if (offset <= selEnd.offset) {
+      break;
     }
+    offset -= selEnd.offset;
+  }
 
-    let range = doc.createRange();
-    range.setStart(rangeStartNode, rangeStartOffset);
-    range.setEnd(selEnd.node, offset);
+  let range = doc.createRange();
+  range.setStart(rangeStartNode, rangeStartOffset);
+  range.setEnd(selEnd.node, offset);
 
-    let sel = window.getSelection();
-    if (!sel.isCollapsed && selText !== sel.toString())
-        return;
-    sel.empty();
-    sel.addRange(range);
-    selText = sel.toString();
+  let sel = window.getSelection();
+  if (!sel.isCollapsed && selText !== sel.toString()) return;
+  sel.empty();
+  sel.addRange(range);
+  selText = sel.toString();
 }
 
 function clearHighlight() {
+  if (selText === null) {
+    return;
+  }
 
-    if (selText === null) {
-        return;
-    }
-
-    let selection = window.getSelection();
-    if (selection.isCollapsed || selText === selection.toString()) {
-        selection.empty();
-    }
-    selText = null;
+  let selection = window.getSelection();
+  if (selection.isCollapsed || selText === selection.toString()) {
+    selection.empty();
+  }
+  selText = null;
 }
 
 function isVisible() {
-    let popup = document.getElementById('zhongwen-window');
-    return popup && popup.style.display !== 'none';
+  let popup = document.getElementById("zhongwen-window");
+  return popup && popup.style.display !== "none";
 }
 
 function getTextForClipboard() {
-    let result = '';
-    for (let i = 0; i < savedSearchResults.length; i++) {
-        result += savedSearchResults[i].slice(0, -1).join('\t');
-        result += '\n';
-    }
-    return result;
+  let result = "";
+  for (let i = 0; i < savedSearchResults.length; i++) {
+    result += savedSearchResults[i].slice(0, -1).join("\t");
+    result += "\n";
+  }
+  return result;
 }
 
 function makeDiv(input) {
-    let div = document.createElement('div');
+  let div = document.createElement("div");
 
-    div.id = 'zhongwenDiv';
+  div.id = "zhongwenDiv";
 
-    let text;
-    if (input.value) {
-        text = input.value;
-    } else {
-        text = '';
-    }
-    div.innerText = text;
+  let text;
+  if (input.value) {
+    text = input.value;
+  } else {
+    text = "";
+  }
+  div.innerText = text;
 
-    div.style.cssText = window.getComputedStyle(input, '').cssText;
-    div.scrollTop = input.scrollTop;
-    div.scrollLeft = input.scrollLeft;
-    div.style.position = 'absolute';
-    div.style.zIndex = 7000;
-    $(div).offset({
-        top: $(input).offset().top,
-        left: $(input).offset().left
-    });
+  div.style.cssText = window.getComputedStyle(input, "").cssText;
+  div.scrollTop = input.scrollTop;
+  div.scrollLeft = input.scrollLeft;
+  div.style.position = "absolute";
+  div.style.zIndex = 7000;
+  $(div).offset({
+    top: $(input).offset().top,
+    left: $(input).offset().left,
+  });
 
-    return div;
+  return div;
 }
 
 function findNextTextNode(root, previous) {
-    if (root === null) {
-        return null;
+  if (root === null) {
+    return null;
+  }
+  let nodeIterator = document.createNodeIterator(
+    root,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+  let node = nodeIterator.nextNode();
+  while (node !== previous) {
+    node = nodeIterator.nextNode();
+    if (node === null) {
+      return findNextTextNode(root.parentNode, previous);
     }
-    let nodeIterator = document.createNodeIterator(root, NodeFilter.SHOW_TEXT, null);
-    let node = nodeIterator.nextNode();
-    while (node !== previous) {
-        node = nodeIterator.nextNode();
-        if (node === null) {
-            return findNextTextNode(root.parentNode, previous);
-        }
-    }
-    let result = nodeIterator.nextNode();
-    if (result !== null) {
-        return result;
-    } else {
-        return findNextTextNode(root.parentNode, previous);
-    }
+  }
+  let result = nodeIterator.nextNode();
+  if (result !== null) {
+    return result;
+  } else {
+    return findNextTextNode(root.parentNode, previous);
+  }
 }
 
 function findPreviousTextNode(root, previous) {
-    if (root === null) {
-        return null;
+  if (root === null) {
+    return null;
+  }
+  let nodeIterator = document.createNodeIterator(
+    root,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+  let node = nodeIterator.nextNode();
+  while (node !== previous) {
+    node = nodeIterator.nextNode();
+    if (node === null) {
+      return findPreviousTextNode(root.parentNode, previous);
     }
-    let nodeIterator = document.createNodeIterator(root, NodeFilter.SHOW_TEXT, null);
-    let node = nodeIterator.nextNode();
-    while (node !== previous) {
-        node = nodeIterator.nextNode();
-        if (node === null) {
-            return findPreviousTextNode(root.parentNode, previous);
-        }
-    }
-    nodeIterator.previousNode();
-    let result = nodeIterator.previousNode();
-    if (result !== null) {
-        return result;
-    } else {
-        return findPreviousTextNode(root.parentNode, previous);
-    }
+  }
+  nodeIterator.previousNode();
+  let result = nodeIterator.previousNode();
+  if (result !== null) {
+    return result;
+  } else {
+    return findPreviousTextNode(root.parentNode, previous);
+  }
 }
 
 function copyToClipboard(data) {
-    chrome.runtime.sendMessage({
-        'type': 'copy',
-        'data': data
-    });
+  chrome.runtime.sendMessage({
+    type: "copy",
+    data: data,
+  });
 
-    showPopup('Copied to clipboard', null, -1, -1);
+  showPopup("Copied to clipboard", null, -1, -1);
 }
 
 function makeHtml(result, showToneColors) {
+  let entry;
+  let html = "";
+  let texts = [];
+  let hanziClass;
 
-    let entry;
-    let html = '';
-    let texts = [];
-    let hanziClass;
+  html += '<span class="cantonese-header">Mandarin</span><br><br>';
 
-    if (result === null) return '';
+  if (result === null) return "";
 
-    for (let i = 0; i < result.data.length; ++i) {
-        entry = result.data[i][0].match(/^([^\s]+?)\s+([^\s]+?)\s+\[(.*?)\]?\s*\/(.+)\//);
-        if (!entry) continue;
+  for (let i = 0; i < result.data.length; ++i) {
+    entry = result.data[i][0].match(
+      /^([^\s]+?)\s+([^\s]+?)\s+\[(.*?)\]?\s*\/(.+)\//
+    );
+    if (!entry) continue;
 
-        // Hanzi
+    // Hanzi
 
-        if (config.simpTrad === 'auto') {
+    if (config.simpTrad === "auto") {
+      let word = result.data[i][1];
 
-            let word = result.data[i][1];
-
-            hanziClass = 'w-hanzi';
-            if (config.fontSize === 'small') {
-                hanziClass += '-small';
-            }
-            html += '<span class="' + hanziClass + '">' + word + '</span>&nbsp;';
-
-        } else {
-
-            hanziClass = 'w-hanzi';
-            if (config.fontSize === 'small') {
-                hanziClass += '-small';
-            }
-            html += '<span class="' + hanziClass + '">' + entry[2] + '</span>&nbsp;';
-            if (entry[1] !== entry[2]) {
-                html += '<span class="' + hanziClass + '">' + entry[1] + '</span>&nbsp;';
-            }
-
-        }
-
-        // Pinyin
-
-        let pinyinClass = 'w-pinyin';
-        if (config.fontSize === 'small') {
-            pinyinClass += '-small';
-        }
-        let p = pinyinAndZhuyin(entry[3], showToneColors, pinyinClass);
-        html += p[0];
-
-        // Zhuyin
-
-        if (config.zhuyin === 'yes') {
-            html += '<br>' + p[2];
-        }
-
-        // Definition
-
-        let defClass = 'w-def';
-        if (config.fontSize === 'small') {
-            defClass += '-small';
-        }
-        let translation = entry[4].replace(/\//g, ' ◆ ');
-        html += '<br><span class="' + defClass + '">' + translation + '</span><br>';
-
-        let addFinalBr = false;
-
-        // Grammar
-        if (config.grammar !== 'no' && result.grammar && result.grammar.index === i) {
-            html += '<br><span class="grammar">Press "g" for grammar and usage notes.</span><br>';
-            addFinalBr = true;
-        }
-
-        // Vocab
-        if (config.vocab !== 'no' && result.vocab && result.vocab.index === i) {
-            html += '<br><span class="vocab">Press "v" for vocabulary notes.</span><br>';
-            addFinalBr = true;
-        }
-
-        if (addFinalBr) {
-            html += '<br>';
-        }
-
-        texts[i] = [entry[2], entry[1], p[1], translation, entry[3]];
-    }
-    if (result.more) {
-        html += '&hellip;<br/>';
+      hanziClass = "w-hanzi";
+      if (config.fontSize === "small") {
+        hanziClass += "-small";
+      }
+      html += '<span class="' + hanziClass + '">' + word + "</span>&nbsp;";
+    } else {
+      hanziClass = "w-hanzi";
+      if (config.fontSize === "small") {
+        hanziClass += "-small";
+      }
+      html += '<span class="' + hanziClass + '">' + entry[2] + "</span>&nbsp;";
+      if (entry[1] !== entry[2]) {
+        html +=
+          '<span class="' + hanziClass + '">' + entry[1] + "</span>&nbsp;";
+      }
     }
 
-    savedSearchResults = texts;
-    savedSearchResults.grammar = result.grammar;
-    savedSearchResults.vocab = result.vocab;
+    // Pinyin
 
-    return html;
+    let pinyinClass = "w-pinyin";
+    if (config.fontSize === "small") {
+      pinyinClass += "-small";
+    }
+    let p = pinyinAndZhuyin(entry[3], showToneColors, pinyinClass);
+    html += p[0];
+
+    // Zhuyin
+
+    if (config.zhuyin === "yes") {
+      html += "<br>" + p[2];
+    }
+
+    // Definition
+
+    let defClass = "w-def";
+    if (config.fontSize === "small") {
+      defClass += "-small";
+    }
+    let translation = entry[4].replace(/\//g, " ◆ ");
+    html += '<br><span class="' + defClass + '">' + translation + "</span><br>";
+
+    let addFinalBr = false;
+
+    // Grammar
+    if (
+      config.grammar !== "no" &&
+      result.grammar &&
+      result.grammar.index === i
+    ) {
+      html +=
+        '<br><span class="grammar">Press "g" for grammar and usage notes.</span><br>';
+      addFinalBr = true;
+    }
+
+    // Vocab
+    if (config.vocab !== "no" && result.vocab && result.vocab.index === i) {
+      html +=
+        '<br><span class="vocab">Press "v" for vocabulary notes.</span><br>';
+      addFinalBr = true;
+    }
+
+    if (addFinalBr) {
+      html += "<br>";
+    }
+
+    texts[i] = [entry[2], entry[1], p[1], translation, entry[3]];
+  }
+  if (result.more) {
+    html += "&hellip;<br/>";
+  }
+
+  // Add Cantonese entries if available
+  if (
+    result.cantonese &&
+    result.cantonese.data &&
+    result.cantonese.data.length > 0
+  ) {
+    html += '<br><hr class="cantonese-separator"><br>';
+    html += '<span class="cantonese-header">Cantonese</span><br><br>';
+
+    for (let i = 0; i < result.cantonese.data.length; ++i) {
+      // Match Cantonese format: traditional simplified [pinyin] {jyutping} /definition/
+      // Note: Some entries have "# adapted from cc-cedict" at the end
+      let cantEntry = result.cantonese.data[i][0].match(
+        /^([^\s]+?)\s+([^\s]+?)\s+\[(.*?)\]?\s*\{(.*?)\}\s*\/(.+?)\/?\s*(?:#.*)?$/
+      );
+
+      // Hanzi (reuse from Mandarin entry - same characters)
+      hanziClass = "w-hanzi";
+      if (config.fontSize === "small") {
+        hanziClass += "-small";
+      }
+
+      if (config.simpTrad === "auto") {
+        let word = result.cantonese.data[i][1];
+        html += '<span class="' + hanziClass + '">' + word + "</span>&nbsp;";
+      } else {
+        html +=
+          '<span class="' + hanziClass + '">' + cantEntry[2] + "</span>&nbsp;";
+        if (cantEntry[1] !== cantEntry[2]) {
+          html +=
+            '<span class="' +
+            hanziClass +
+            '">' +
+            cantEntry[1] +
+            "</span>&nbsp;";
+        }
+      }
+
+      // Jyutping
+      let jyutpingClass = "w-jyutping";
+      if (config.fontSize === "small") {
+        jyutpingClass += "-small";
+      }
+      let jyutping = result.cantonese.data[i][2];
+      if (jyutping) {
+        let j = jyutpingFormat(jyutping, showToneColors, jyutpingClass);
+        html += j[0];
+      }
+
+      // Cantonese Definition
+      let defClass = "w-def";
+      if (config.fontSize === "small") {
+        defClass += "-small";
+      }
+      let cantTranslation = cantEntry[5].replace(/\//g, " ◆ ");
+      html +=
+        '<br><span class="' + defClass + '">' + cantTranslation + "</span><br>";
+
+      // Add spacing between entries
+      if (i < result.cantonese.data.length - 1) {
+        html += "<br>";
+      }
+    }
+
+    if (result.cantonese.more) {
+      html += "&hellip;<br/>";
+    }
+  }
+
+  savedSearchResults = texts;
+  savedSearchResults.grammar = result.grammar;
+  savedSearchResults.vocab = result.vocab;
+
+  return html;
 }
 
 let tones = {
-    1: '&#772;',
-    2: '&#769;',
-    3: '&#780;',
-    4: '&#768;',
-    5: ''
+  1: "&#772;",
+  2: "&#769;",
+  3: "&#780;",
+  4: "&#768;",
+  5: "",
 };
 
 let utones = {
-    1: '\u0304',
-    2: '\u0301',
-    3: '\u030C',
-    4: '\u0300',
-    5: ''
+  1: "\u0304",
+  2: "\u0301",
+  3: "\u030C",
+  4: "\u0300",
+  5: "",
 };
 
 function parse(s) {
-    return s.match(/([^AEIOU:aeiou]*)([AEIOUaeiou:]+)([^aeiou:]*)([1-5])/);
+  return s.match(/([^AEIOU:aeiou]*)([AEIOUaeiou:]+)([^aeiou:]*)([1-5])/);
 }
 
 function tonify(vowels, tone) {
-    let html = '';
-    let text = '';
+  let html = "";
+  let text = "";
 
-    if (vowels === 'ou') {
-        html = 'o' + tones[tone] + 'u';
-        text = 'o' + utones[tone] + 'u';
-    } else {
-        let tonified = false;
-        for (let i = 0; i < vowels.length; i++) {
-            let c = vowels.charAt(i);
-            html += c;
-            text += c;
-            if (c === 'a' || c === 'e') {
-                html += tones[tone];
-                text += utones[tone];
-                tonified = true;
-            } else if (i === vowels.length - 1 && !tonified) {
-                html += tones[tone];
-                text += utones[tone];
-                tonified = true;
-            }
-        }
-        html = html.replace(/u:/, '&uuml;');
-        text = text.replace(/u:/, '\u00FC');
+  if (vowels === "ou") {
+    html = "o" + tones[tone] + "u";
+    text = "o" + utones[tone] + "u";
+  } else {
+    let tonified = false;
+    for (let i = 0; i < vowels.length; i++) {
+      let c = vowels.charAt(i);
+      html += c;
+      text += c;
+      if (c === "a" || c === "e") {
+        html += tones[tone];
+        text += utones[tone];
+        tonified = true;
+      } else if (i === vowels.length - 1 && !tonified) {
+        html += tones[tone];
+        text += utones[tone];
+        tonified = true;
+      }
+    }
+    html = html.replace(/u:/, "&uuml;");
+    text = text.replace(/u:/, "\u00FC");
+  }
+
+  return [html, text];
+}
+
+function jyutpingFormat(jyutping, showToneColors, jyutpingClass) {
+  // Format Jyutping similar to Pinyin
+  // Jyutping uses tone numbers at the end (1-6)
+  let text = "";
+  let html = "";
+  let syllables = jyutping.split(/[\s]+/);
+
+  for (let i = 0; i < syllables.length; i++) {
+    let syllable = syllables[i];
+
+    if (i > 0) {
+      html += "&nbsp;";
+      text += " ";
     }
 
-    return [html, text];
+    // Extract tone number from end of syllable
+    let toneMatch = syllable.match(/^(.+?)([1-6])$/);
+    if (toneMatch) {
+      let base = toneMatch[1];
+      let tone = toneMatch[2];
+
+      if (showToneColors) {
+        html += '<span class="' + jyutpingClass + " tone" + tone + '">';
+      } else {
+        html += '<span class="' + jyutpingClass + '">';
+      }
+      html += syllable;
+      html += "</span>";
+      text += syllable;
+    } else {
+      // No tone number, use neutral tone
+      if (showToneColors) {
+        html += '<span class="' + jyutpingClass + ' tone5">';
+      } else {
+        html += '<span class="' + jyutpingClass + '">';
+      }
+      html += syllable;
+      html += "</span>";
+      text += syllable;
+    }
+  }
+
+  return [html, text];
 }
 
 function pinyinAndZhuyin(syllables, showToneColors, pinyinClass) {
-    let text = '';
-    let html = '';
-    let zhuyin = '';
-    let a = syllables.split(/[\s·]+/);
-    for (let i = 0; i < a.length; i++) {
-        let syllable = a[i];
+  let text = "";
+  let html = "";
+  let zhuyin = "";
+  let a = syllables.split(/[\s·]+/);
+  for (let i = 0; i < a.length; i++) {
+    let syllable = a[i];
 
-        // ',' in pinyin
-        if (syllable === ',') {
-            html += ' ,';
-            text += ' ,';
-            continue;
-        }
-
-        if (i > 0) {
-            html += '&nbsp;';
-            text += ' ';
-            zhuyin += '&nbsp;';
-        }
-        if (syllable === 'r5') {
-            if (showToneColors) {
-                html += '<span class="' + pinyinClass + ' tone5">r</span>';
-            } else {
-                html += '<span class="' + pinyinClass + '">r</span>';
-            }
-            text += 'r';
-            continue;
-        }
-        if (syllable === 'xx5') {
-            if (showToneColors) {
-                html += '<span class="' + pinyinClass + ' tone5">??</span>';
-            } else {
-                html += '<span class="' + pinyinClass + '">??</span>';
-            }
-            text += '??';
-            continue;
-        }
-        let m = parse(syllable);
-        if (showToneColors) {
-            html += '<span class="' + pinyinClass + ' tone' + m[4] + '">';
-        } else {
-            html += '<span class="' + pinyinClass + '">';
-        }
-        let t = tonify(m[2], m[4]);
-        html += m[1] + t[0] + m[3];
-        html += '</span>';
-        text += m[1] + t[1] + m[3];
-
-        let zhuyinClass = 'w-zhuyin';
-        if (config.fontSize === 'small') {
-            zhuyinClass += '-small';
-        }
-
-        zhuyin += '<span class="tone' + m[4] + ' ' + zhuyinClass + '">'
-            + globalThis.numericPinyin2Zhuyin(syllable) + '</span>';
+    // ',' in pinyin
+    if (syllable === ",") {
+      html += " ,";
+      text += " ,";
+      continue;
     }
-    return [html, text, zhuyin];
+
+    if (i > 0) {
+      html += "&nbsp;";
+      text += " ";
+      zhuyin += "&nbsp;";
+    }
+    if (syllable === "r5") {
+      if (showToneColors) {
+        html += '<span class="' + pinyinClass + ' tone5">r</span>';
+      } else {
+        html += '<span class="' + pinyinClass + '">r</span>';
+      }
+      text += "r";
+      continue;
+    }
+    if (syllable === "xx5") {
+      if (showToneColors) {
+        html += '<span class="' + pinyinClass + ' tone5">??</span>';
+      } else {
+        html += '<span class="' + pinyinClass + '">??</span>';
+      }
+      text += "??";
+      continue;
+    }
+    let m = parse(syllable);
+    if (showToneColors) {
+      html += '<span class="' + pinyinClass + " tone" + m[4] + '">';
+    } else {
+      html += '<span class="' + pinyinClass + '">';
+    }
+    let t = tonify(m[2], m[4]);
+    html += m[1] + t[0] + m[3];
+    html += "</span>";
+    text += m[1] + t[1] + m[3];
+
+    let zhuyinClass = "w-zhuyin";
+    if (config.fontSize === "small") {
+      zhuyinClass += "-small";
+    }
+
+    zhuyin +=
+      '<span class="tone' +
+      m[4] +
+      " " +
+      zhuyinClass +
+      '">' +
+      globalThis.numericPinyin2Zhuyin(syllable) +
+      "</span>";
+  }
+  return [html, text, zhuyin];
 }
 
 let miniHelp = `
@@ -1116,25 +1287,23 @@ let miniHelp = `
     </table>`;
 
 // event listener
-chrome.runtime.onMessage.addListener(
-    function (request) {
-        switch (request.type) {
-            case 'enable':
-                enableTab();
-                config = request.config;
-                break;
-            case 'disable':
-                disableTab();
-                break;
-            case 'showPopup':
-                if (!request.isHelp || window === window.top) {
-                    showPopup(request.text);
-                }
-                break;
-            case 'showHelp':
-                showPopup(miniHelp);
-                break;
-            default:
-        }
-    }
-);
+chrome.runtime.onMessage.addListener(function (request) {
+  switch (request.type) {
+    case "enable":
+      enableTab();
+      config = request.config;
+      break;
+    case "disable":
+      disableTab();
+      break;
+    case "showPopup":
+      if (!request.isHelp || window === window.top) {
+        showPopup(request.text);
+      }
+      break;
+    case "showHelp":
+      showPopup(miniHelp);
+      break;
+    default:
+  }
+});

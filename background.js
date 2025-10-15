@@ -173,13 +173,19 @@ async function loadDictData() {
     let vocabKeywords = fetch(chrome.runtime.getURL(
         "data/vocabularyKeywordsMin.json")).then(r => r.json());
 
-    return Promise.all([wordDict, wordIndex, grammarKeywords, vocabKeywords]);
+    // Load Cantonese dictionaries
+    let cantoneseDict = fetch(chrome.runtime.getURL(
+        "data/cccanto-webdist.u8")).then(r => r.text());
+    let cantoneseIndex = fetch(chrome.runtime.getURL(
+        "data/cccanto-webdist.idx")).then(r => r.text());
+
+    return Promise.all([wordDict, wordIndex, grammarKeywords, vocabKeywords, cantoneseDict, cantoneseIndex]);
 }
 
 
 async function loadDictionary() {
-    let [wordDict, wordIndex, grammarKeywords, vocabKeywords] = await loadDictData();
-    return new ZhongwenDictionary(wordDict, wordIndex, grammarKeywords, vocabKeywords);
+    let [wordDict, wordIndex, grammarKeywords, vocabKeywords, cantoneseDict, cantoneseIndex] = await loadDictData();
+    return new ZhongwenDictionary(wordDict, wordIndex, grammarKeywords, vocabKeywords, cantoneseDict, cantoneseIndex);
 }
 
 function deactivateExtension() {
@@ -261,6 +267,12 @@ function search(text) {
                 entry.vocab = { keyword: word, index: i };
             }
         }
+    }
+
+    // Also search in Cantonese dictionary
+    let cantoneseEntry = dict.cantoneseSearch(text);
+    if (cantoneseEntry) {
+        entry.cantonese = cantoneseEntry;
     }
 
     return entry;

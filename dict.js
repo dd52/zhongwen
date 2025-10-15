@@ -44,100 +44,177 @@
 
  */
 
-'use strict';
+"use strict";
 
 export class ZhongwenDictionary {
+  constructor(
+    wordDict,
+    wordIndex,
+    grammarKeywords,
+    vocabKeywords,
+    cantoneseDict = null,
+    cantoneseIndex = null
+  ) {
+    this.wordDict = wordDict;
+    this.wordIndex = wordIndex;
+    this.grammarKeywords = grammarKeywords;
+    this.vocabKeywords = vocabKeywords;
+    this.cache = {};
 
-    constructor(wordDict, wordIndex, grammarKeywords, vocabKeywords) {
-        this.wordDict = wordDict;
-        this.wordIndex = wordIndex;
-        this.grammarKeywords = grammarKeywords;
-        this.vocabKeywords = vocabKeywords;
-        this.cache = {};
+    // Cantonese dictionary support
+    this.cantoneseDict = cantoneseDict;
+    this.cantoneseIndex = cantoneseIndex;
+    this.cantoneseCache = {};
+  }
+
+  static find(needle, haystack) {
+    let beg = 0;
+    let end = haystack.length - 1;
+
+    while (beg < end) {
+      let mi = Math.floor((beg + end) / 2);
+      let i = haystack.lastIndexOf("\n", mi) + 1;
+
+      let mis = haystack.substr(i, needle.length);
+      if (needle < mis) {
+        end = i - 1;
+      } else if (needle > mis) {
+        beg = haystack.indexOf("\n", mi + 1) + 1;
+      } else {
+        return haystack.substring(i, haystack.indexOf("\n", mi + 1));
+      }
     }
 
-    static find(needle, haystack) {
+    return null;
+  }
 
-        let beg = 0;
-        let end = haystack.length - 1;
+  hasGrammarKeyword(keyword) {
+    return this.grammarKeywords[keyword];
+  }
 
-        while (beg < end) {
-            let mi = Math.floor((beg + end) / 2);
-            let i = haystack.lastIndexOf('\n', mi) + 1;
+  hasVocabKeyword(keyword) {
+    return this.vocabKeywords[keyword];
+  }
 
-            let mis = haystack.substr(i, needle.length);
-            if (needle < mis) {
-                end = i - 1;
-            } else if (needle > mis) {
-                beg = haystack.indexOf('\n', mi + 1) + 1;
-            } else {
-                return haystack.substring(i, haystack.indexOf('\n', mi + 1));
-            }
+  wordSearch(word, max) {
+    let entry = { data: [] };
+
+    let dict = this.wordDict;
+    let index = this.wordIndex;
+
+    let maxTrim = max || 7;
+
+    let count = 0;
+    let maxLen = 0;
+
+    WHILE: while (word.length > 0) {
+      let ix = this.cache[word];
+      if (!ix) {
+        ix = ZhongwenDictionary.find(word + ",", index);
+        if (!ix) {
+          this.cache[word] = [];
+          continue;
+        }
+        ix = ix.split(",");
+        this.cache[word] = ix;
+      }
+
+      for (let j = 1; j < ix.length; ++j) {
+        let offset = ix[j];
+
+        let dentry = dict.substring(offset, dict.indexOf("\n", offset));
+
+        if (count >= maxTrim) {
+          entry.more = 1;
+          break WHILE;
         }
 
-        return null;
-    }
-
-    hasGrammarKeyword(keyword) {
-        return this.grammarKeywords[keyword];
-    }
-
-    hasVocabKeyword(keyword) {
-        return this.vocabKeywords[keyword];
-    }
-
-    wordSearch(word, max) {
-
-        let entry = { data: [] };
-
-        let dict = this.wordDict;
-        let index = this.wordIndex;
-
-        let maxTrim = max || 7;
-
-        let count = 0;
-        let maxLen = 0;
-
-        WHILE:
-            while (word.length > 0) {
-
-                let ix = this.cache[word];
-                if (!ix) {
-                    ix = ZhongwenDictionary.find(word + ',', index);
-                    if (!ix) {
-                        this.cache[word] = [];
-                        continue;
-                    }
-                    ix = ix.split(',');
-                    this.cache[word] = ix;
-                }
-
-                for (let j = 1; j < ix.length; ++j) {
-                    let offset = ix[j];
-
-                    let dentry = dict.substring(offset, dict.indexOf('\n', offset));
-
-                    if (count >= maxTrim) {
-                        entry.more = 1;
-                        break WHILE;
-                    }
-
-                    ++count;
-                    if (maxLen === 0) {
-                        maxLen = word.length;
-                    }
-
-                    entry.data.push([dentry, word]);
-                }
-
-                word = word.substr(0, word.length - 1);
-            }
-
-        if (entry.data.length === 0) {
-            return null;
+        ++count;
+        if (maxLen === 0) {
+          maxLen = word.length;
         }
 
-        entry.matchLen = maxLen;
-        return entry;
+        entry.data.push([dentry, word]);
+      }
+
+      word = word.substr(0, word.length - 1);
     }
+
+    if (entry.data.length === 0) {
+      return null;
+    }
+
+    entry.matchLen = maxLen;
+    return entry;
+  }
+
+  cantoneseSearch(word, max) {
+    // If no Cantonese dictionary is loaded, return null
+    if (!this.cantoneseDict || !this.cantoneseIndex) {
+      return null;
+    }
+
+    let entry = { data: [] };
+
+    let dict = this.cantoneseDict;
+    let index = this.cantoneseIndex;
+
+    let maxTrim = max || 7;
+
+    let count = 0;
+    let maxLen = 0;
+
+    WHILE: while (word.length > 0) {
+      let ix = this.cantoneseCache[word];
+      if (!ix) {
+        ix = ZhongwenDictionary.find(word + ",", index);
+        if (!ix) {
+          this.cantoneseCache[word] = [];
+          continue;
+        }
+        ix = ix.split(",");
+        this.cantoneseCache[word] = ix;
+      }
+
+      for (let j = 1; j < ix.length; ++j) {
+        let offset = parseInt(ix[j], 10);
+
+        let dentry = dict.substring(offset, dict.indexOf("\n", offset));
+
+        if (count >= maxTrim) {
+          entry.more = 1;
+          break WHILE;
+        }
+
+        ++count;
+        if (maxLen === 0) {
+          maxLen = word.length;
+        }
+
+        // Parse Jyutping from {jyutping} format
+        let jyutping = this.extractJyutping(dentry);
+
+        entry.data.push([dentry, word, jyutping]);
+      }
+
+      word = word.substr(0, word.length - 1);
+    }
+
+    if (entry.data.length === 0) {
+      return null;
+    }
+
+    entry.matchLen = maxLen;
+    return entry;
+  }
+
+  extractJyutping(entry) {
+    // Extract Jyutping from {jyutping} format
+    // Example: 一个 一个 [yi1 ge5] {jat1 go3} /One;a/an/
+    let match = entry.match(/\{([^}]+)\}/);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    return "";
+  }
 }
